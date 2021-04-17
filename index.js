@@ -40,14 +40,14 @@ async function main()
             return container
         }
 
-        const posts = data.body.items.filter(x => x.body.images || x.body.files).map(x => {            
+        const posts = data.body.items.map(x => {            
             return {
                 'title': x.title,
-                'images': [ x.body.images?.map(el => el.originalUrl), x.body.files?.map(x => x.url)].filter(Boolean).flat()
+                'images': [ x.body?.images?.map(el => el.originalUrl), x.body?.files?.map(x => x.url)].filter(Boolean).flat()
             }
         })
 
-        return fetchInternal(data.nextUrl, [posts, container].flat())
+        return fetchInternal(data.nextUrl, [posts.filter(x => x.images.length > 0), container].flat())
     }
 
     const results = await fetchInternal(`https://api.fanbox.cc/post.listCreator?creatorId=${id}&limit=100`, [])
