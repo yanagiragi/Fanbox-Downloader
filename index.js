@@ -4,9 +4,8 @@ const path = require('path')
 const util = require('util')
 const streamPipeline = util.promisify(require('stream').pipeline)
 
-// paste your data here
-const id = ``
-const cookie = ``
+const id = process.env.id
+const cookie = process.env.session
 
 function FetchWrapper(url) {
     return fetch(url, {
@@ -35,7 +34,7 @@ async function main()
 
         const resp = await FetchWrapper(url)
         const data = await resp.json()
-
+        
         if (data.body.items.length == 0) {
             return container
         }
@@ -43,7 +42,11 @@ async function main()
         const posts = data.body.items.map(x => {            
             return {
                 'title': x.title,
-                'images': [ x.body?.images?.map(el => el.originalUrl), x.body?.files?.map(x => x.url)].filter(Boolean).flat()
+                'images': [ 
+                    x.body?.images?.map(el => el.originalUrl), 
+                    Object.values(x.body?.imageMap ?? []).map(el => el.originalUrl),
+                    x.body?.files?.map(x => x.url), 
+                ].filter(Boolean).flat()
             }
         })
 
