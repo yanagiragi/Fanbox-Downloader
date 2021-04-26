@@ -5,7 +5,7 @@ const util = require('util')
 const streamPipeline = util.promisify(require('stream').pipeline)
 
 const id = process.env.id
-const cookie = process.env.session
+const session = process.env.session
 
 function FetchWrapper(url) {
     return fetch(url, {
@@ -18,7 +18,7 @@ function FetchWrapper(url) {
             "Accept-Language": "zh-TW,zh;q=0.8,en-US;q=0.5,en;q=0.3",
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
-            "Cookie": cookie
+            "Cookie": `FANBOXSESSID=${session};`
         },
         "referrer": `https://${id}.fanbox.cc/`,
         "method": "GET",
@@ -32,25 +32,31 @@ async function main()
             return container
         }
 
-        const resp = await FetchWrapper(url)
-        const data = await resp.json()
-        
-        if (data.body.items.length == 0) {
-            return container
-        }
+        try {
+            const resp = await FetchWrapper(url)
+            const data = await resp.json()
 
-        const posts = data.body.items.map(x => {            
-            return {
-                'title': x.title,
-                'images': [ 
-                    x.body?.images?.map(el => el.originalUrl), 
-                    Object.values(x.body?.imageMap ?? []).map(el => el.originalUrl),
-                    x.body?.files?.map(x => x.url), 
-                ].filter(Boolean).flat()
+            if (data.body.items.length == 0) {
+                return container
             }
-        })
-
-        return fetchInternal(data.nextUrl, [posts.filter(x => x.images.length > 0), container].flat())
+    
+            const posts = data.body.items.map(x => {            
+                return {
+                    'title': x.title,
+                    'images': [ 
+                        x.body?.images?.map(el => el.originalUrl), 
+                        Object.values(x.body?.imageMap ?? []).map(el => el.originalUrl),
+                        x.body?.files?.map(x => x.url), 
+                    ].filter(Boolean).flat()
+                }
+            })
+    
+            return fetchInternal(data.nextUrl, [posts.filter(x => x.images.length > 0), container].flat())
+        } catch (error) {
+            console.error("Error Occurs.")
+            console.error(`Raw = ${error}`)
+            return []
+        }        
     }
 
     const results = await fetchInternal(`https://api.fanbox.cc/post.listCreator?creatorId=${id}&limit=100`, [])
@@ -60,12 +66,13 @@ async function main()
 
 async function FetchImage (url, filename) {
     try {
-        if (fs.existsSync(filename)) return false
-		const resp = await FetchWrapper(url)
-        if (!resp.ok) throw new Error(`Error When Downloading ${url}`)
-		await streamPipeline(await resp.body, fs.createWriteStream(filename))
+        const resp = await FetchWrapper(url)
+        if (!resp.ok) {
+            throw new Error(`Error When Downloading ${url}`)
+        } 
+        await streamPipeline(await resp.body, fs.createWriteStream(filename))
 	} catch (error) {
-		console.log(`Error when download ${url}`)
+		console.log(`Error when download ${url}, error = ${error}`)
 		return false
 	}
 
@@ -87,14 +94,27 @@ async function Deal(results) {
         }
 
         for(const image of result.images) {
-
-            console.log(`\t Downloading ${image}`)
-            
+            console.log(`\t Downloading ${image}`)            
             const matched = image.match(/\/([a-zA-Z0-9]+\.[a-zA-Z0-9]+$)/)
             const savename = matched[0]
-            await FetchImage(image, path.join(folderPath, savename.substring(1)))
+            const filename = path.join(folderPath, savename.substring(1))
+
+            if (fs.existsSync(filename)) {
+                console.log(`\t\t Skiped: ${image}`)
+                continue
+            }
+            const result = await FetchImage(image, filename)
+            if (result)
+                console.log(`\t\t Downloaded: ${image}`)
+            else
+                console.log(`\t\t Error: ${image}`)
         }
     }
 }
 
-main()
+if (id == null || session == null) {
+    console.log('No Id and session provided. Abort.')
+}
+else {
+    main()
+}
