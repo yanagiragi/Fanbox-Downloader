@@ -1,12 +1,18 @@
-const fetch = require('node-fetch')
 const fs = require('fs')
 const path = require('path')
 const util = require('util')
+const fetch = require('node-fetch')
 const sanitize = require('sanitize-filename')
 const streamPipeline = util.promisify(require('stream').pipeline)
+const prompts = require('prompts');
 
-const id = process.env.id
-const session = process.env.session
+const yargs = require('yargs/yargs')
+const { hideBin } = require('yargs/helpers')
+const argv = yargs(hideBin(process.argv)).argv
+
+var id =  argv.id
+var session = argv.session
+const isVerbose = (argv.verbose && argv.verbose == 'true') ? true : false
 
 function FetchWrapper(url) {
 	return fetch(url, {
@@ -26,14 +32,45 @@ function FetchWrapper(url) {
 	})
 }
 
+async function GetConfig () {
+
+	let idResponse = id
+	if (idResponse == null) {
+		idResponse = await prompts({
+			type: 'text',
+			name: 'value',
+			message: 'Enter fanbox ID:'
+		})
+		idResponse = idResponse?.value
+	}
+
+	let sessionResponse = session
+	if (sessionResponse == null) {
+		sessionResponse = await prompts({
+			type: 'text',
+			name: 'value',
+			message: 'Enter fanbox session:'
+		})
+		sessionResponse = sessionResponse?.value
+	}
+
+	return [idResponse, sessionResponse]
+}
+
 async function main()
 {
+	if (id == null || session == null) {
+		[id, session] = await GetConfig()
+	}
+
 	const fetchInternal = async (url, container) => {
 		if (url == undefined) {
 			return container
 		}
 
-		console.log(`Fetching ${url}`)
+		if (isVerbose) {
+			console.log(`Fetching ${url}`)
+		}
 
 		try {
 			const resp = await FetchWrapper(url)
@@ -85,7 +122,9 @@ async function FetchImage (url, filename) {
 async function Download(image, filename)
 {
 	if (fs.existsSync(filename)) {
-		console.log(`\t\t Skiped: ${image}`)
+		if (isVerbose) {
+			console.log(`\t\t Skiped: ${image}`)
+		}
 		return
 	}
 	const result = await FetchImage(image, filename)
@@ -106,7 +145,10 @@ async function Deal(results) {
 	}
 
 	for (const result of results) {
-		console.log(`Download ${result.title} [${result.images.length}]`)
+
+		if (isVerbose) {
+			console.log(`Download ${result.title} [${result.images.length}]`)
+		}
 
 		const folderPath = path.join('Storage', id, `${result.id}-${sanitize(result.title)}`)
 		if (!fs.existsSync(folderPath)) {
@@ -114,7 +156,11 @@ async function Deal(results) {
 		}
 
 		if (result.cover) {
-			console.log(`\t Downloading Cover: ${JSON.stringify(result)}`)
+
+			if (isVerbose) {
+				console.log(`\t Downloading Cover: ${JSON.stringify(result)}`)
+			}
+
 			const matched = result.cover.match(/\/([a-zA-Z0-9]+\.[a-zA-Z0-9]+$)/)
 			const savename = matched[0]
 			const filename = path.join(folderPath, `cover-${savename.substring(1)}`)
@@ -122,7 +168,11 @@ async function Deal(results) {
 		}
 
 		for(const image of result.images) {
-			console.log(`\t Downloading ${image}`)
+
+			if (isVerbose) {
+				console.log(`\t Downloading ${image}`)
+			}
+
 			const matched = image.match(/\/([a-zA-Z0-9]+\.[a-zA-Z0-9]+$)/)
 			const savename = matched[0]
 			const filename = path.join(folderPath, savename.substring(1))
@@ -131,9 +181,4 @@ async function Deal(results) {
 	}
 }
 
-if (id == null || session == null) {
-	console.log('No Id and session provided. Abort.')
-}
-else {
-	main()
-}
+main();

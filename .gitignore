@@ -116,3 +116,4 @@ dist
 .pnp.*
 
 Storage/*
+run.sh

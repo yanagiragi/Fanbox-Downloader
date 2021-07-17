@@ -5,7 +5,9 @@
   "main": "index.js",
   "dependencies": {
     "node-fetch": "^2.6.1",
-    "sanitize-filename": "^1.6.3"
+    "prompts": "^2.4.1",
+    "sanitize-filename": "^1.6.3",
+    "yargs": "^17.0.1"
   },
   "devDependencies": {
     "eslint": "^7.30.0"
